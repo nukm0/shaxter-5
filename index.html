@@ -302,26 +302,43 @@
         }
     }
 
+    // Функция полного сброса прогресса пользователя (удаляет документ и создаёт новый с чистым стартом)
     async function resetUserProgress() {
-        await modifyUserData(null, async (userData) => {
-            userData.resources = { diamonds:0, oil:0, gold:0, bucks:0, superBucks:0 };
-            userData.minersCount = new Array(7).fill(0);
-            userData.totalMined = 0;
-            userData.totalMinersPurchased = 0;
-            userData.totalExchangeDiamonds = 0;
-            userData.totalBucksSpentOnShop = 0;
-            userData.prestigeCount = 0;
-            userData.prestigeMultiplier = 1.0;
-            userData.storageLevel = 0;
-            userData.storedDiamonds = 0;
-            userData.oilIsland = { owned: false, lastCollect: 0 };
-            if(userData.currentUser) {
-                userData.currentUser.daily = { streak:0, lastClaim:0, claimedDays:[] };
-                userData.currentUser.vip = { active:false, expires:0, forever:false };
-                userData.currentUser.vipDailyLast = 0;
-            }
-            return true;
-        });
+        if(isGuest) { showToast("Админ-панель доступна только в Telegram"); return; }
+        const targetId = document.getElementById('targetUserId').value;
+        if(!targetId || targetId === 'guest') { showToast("Введите корректный Telegram ID"); return; }
+        if(!confirm(`Вы уверены, что хотите полностью удалить прогресс пользователя ${targetId}? Это действие необратимо!`)) return;
+        
+        const userRef = doc(db, "users", targetId);
+        // Создаём чистые данные пользователя
+        const cleanData = {
+            resources: { diamonds: 0, oil: 0, gold: 10000, bucks: 0, superBucks: 0 },
+            minersCount: new Array(7).fill(0),
+            totalMined: 0,
+            totalMinersPurchased: 0,
+            totalExchangeDiamonds: 0,
+            totalBucksSpentOnShop: 0,
+            prestigeCount: 0,
+            prestigeMultiplier: 1.0,
+            storageLevel: 0,
+            storageCollectedAt: Date.now(),
+            storedDiamonds: 0,
+            oilIsland: { owned: false, lastCollect: 0 },
+            currentUser: {
+                id: targetId,
+                refBy: null,
+                refEarnings: 0,
+                referrals: [],
+                joinTime: Date.now(),
+                vip: { active: false, expires: 0, forever: false },
+                daily: { streak: 0, lastClaim: 0, claimedDays: [] },
+                vipDailyLast: 0
+            },
+            lastUpdated: Date.now()
+        };
+        await setDoc(userRef, cleanData);
+        showToast(`✅ Прогресс пользователя ${targetId} полностью удалён. Выдано 10000 золота`);
+        if(targetId === userTelegramId) await loadGame();
     }
 
     async function modifyMiners(uid, level, amount, isAdd) {
