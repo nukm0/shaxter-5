@@ -490,7 +490,6 @@
             if(!referrals.includes(userTelegramId)) {
                 referrals.push(userTelegramId);
                 await updateDoc(inviterRef, { referrals });
-                // Обновляем задание на рефералов у пригласившего
                 updateQuestsByTypeForUser(refId, 'referrals_count', 1);
             }
         } else {
@@ -571,7 +570,6 @@
                 else if(currentUser.vip.expires > Date.now()) currentUser.vip.active = true;
                 else currentUser.vip.active = false;
                 
-                // Загружаем задания
                 if(data.questTemplates) questTemplates = data.questTemplates;
                 if(data.premiumQuests) premiumQuests = data.premiumQuests;
                 if(data.referralQuests) referralQuests = data.referralQuests;
@@ -610,7 +608,6 @@
             let y=new Date(Date.now()-86400000).toDateString();
             if(lastClaim!==y){ currentUser.daily.streak=0; currentUser.daily.claimedDays=[]; }
         }
-        // Инициализация заданий, если их нет
         if(!questTemplates) {
             questTemplates = {
                 mine: { name: "Добыча алмазов", baseReq: 100, multiplier: 2, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"diamonds_mined" },
@@ -700,7 +697,49 @@
     }
     function showModal(title,text){ let m=document.createElement('div'); m.className='modal'; m.innerHTML=`<div class="modal-content"><h3>${title}</h3><div style="white-space:pre-line">${text}</div><button class="close-modal">Закрыть</button></div>`; document.body.appendChild(m); m.querySelector('.close-modal').onclick=()=>m.remove(); }
     function showToast(msg){ let t=document.createElement('div'); t.className='toast'; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
-    function deleteProgress(){ if(confirm("Удалить прогресс? Необратимо!")){ resources={diamonds:0,oil:0,gold:0,bucks:0,superBucks:0}; minersCount.fill(0); totalMined=0; totalMinersPurchased=0; totalExchangeDiamonds=0; totalBucksSpentOnShop=0; storageLevel=0; storedDiamonds=0; prestigeCount=0; prestigeMultiplier=1.0; currentUser.daily.streak=0; currentUser.daily.claimedDays=[]; saveGame(); updateUI(); showToast("Прогресс удалён"); } }
+    
+    // ИСПРАВЛЕННАЯ ФУНКЦИЯ УДАЛЕНИЯ ПРОГРЕССА (КНОПКА В ЛИЧНОМ КАБИНЕТЕ)
+    function deleteProgress() { 
+        if(confirm("Удалить прогресс? Необратимо! Вы получите 10000 золота, а задания и шахтёры сбросятся.")){ 
+            // Сбрасываем ресурсы, но оставляем нефть и баксы (как при престиже)
+            resources = { diamonds: 0, oil: resources.oil, gold: 10000, bucks: resources.bucks, superBucks: 0 };
+            minersCount.fill(0); 
+            totalMined = 0; 
+            totalMinersPurchased = 0; 
+            totalExchangeDiamonds = 0; 
+            totalBucksSpentOnShop = 0; 
+            storageLevel = 0; 
+            storedDiamonds = 0; 
+            prestigeCount = 0; 
+            prestigeMultiplier = 1.0;
+            // Сбрасываем ежедневный стрик
+            currentUser.daily.streak = 0;
+            currentUser.daily.claimedDays = [];
+            currentUser.daily.lastClaim = 0;
+            // Сбрасываем задания полностью (как при престиже)
+            if(questTemplates.mine) {
+                questTemplates.mine.currentLevel = 0;
+                questTemplates.mine.claimedLevels = [];
+                questTemplates.miners.currentLevel = 0;
+                questTemplates.miners.claimedLevels = [];
+                questTemplates.exchange.currentLevel = 0;
+                questTemplates.exchange.claimedLevels = [];
+            }
+            if(premiumQuests[0]) {
+                premiumQuests[0].currentLevel = 0;
+                premiumQuests[0].claimedLevels = [];
+            }
+            if(referralQuests[0]) {
+                referralQuests[0].currentLevel = 0;
+                referralQuests[0].claimedLevels = [];
+            }
+            // Нефтяной остров оставляем (если был куплен)
+            // Рефералов не трогаем
+            saveGame(); 
+            updateUI(); 
+            showToast("Прогресс удалён, выдано 10000 золота, задания сброшены!"); 
+        } 
+    }
 
     function bindEvents() {
         document.getElementById('maxDiamonds').onclick=()=>document.getElementById('diamondAmount').value=Math.floor(resources.diamonds);
