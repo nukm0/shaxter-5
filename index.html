@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Miner Empire | Полная админ-панель</title>
+    <title>Miner Empire | Полная версия</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background: linear-gradient(135deg, #170a2e, #3b1c68, #7e42c9); padding: 16px; color: #f5ecff; min-height: 100vh; }
@@ -273,7 +273,25 @@
     function addToStorage(amt) { let h = getStorageHours(); let maxStorage = h === Infinity ? Infinity : totalProductionRaw() * h * 3600; if(maxStorage !== Infinity && storedDiamonds + amt > maxStorage) { storedDiamonds = maxStorage; } else { storedDiamonds += amt; } storageCollectedAt = Date.now(); }
     function collectStorage() { if(storedDiamonds > 0) { let collected = storedDiamonds; resources.diamonds += collected; storedDiamonds = 0; showToast(`📦 Забрано ${Math.floor(collected)}💎 со склада на счёт`); saveGame(); updateUI(); } else { showToast("Склад пуст"); } }
     function getPrestigeCost() { let bs=1000, bb=50; for(let i=0;i<prestigeCount;i++){ bs=Math.floor(bs*1.35); bb=Math.floor(bb*1.35); } return { super: bs, bucks: bb }; }
-    function performPrestige() { let c=getPrestigeCost(); if(resources.superBucks>=c.super && resources.bucks>=c.bucks){ resources.superBucks-=c.super; resources.bucks-=c.bucks; resources.diamonds=0; resources.gold=0; minersCount.fill(0); totalMined=0; totalMinersPurchased=0; totalExchangeDiamonds=0; totalBucksSpentOnShop=0; storageLevel=0; storedDiamonds=0; prestigeCount++; prestigeMultiplier=1+prestigeCount*0.2; saveGame(); updateUI(); showToast(`🌟 Престиж! Множитель ${prestigeMultiplier.toFixed(1)}x`); } else showToast(`Не хватает: ${c.super}💸 и ${c.bucks}💵`); }
+    function performPrestige() { 
+        let c=getPrestigeCost(); 
+        if(resources.superBucks>=c.super && resources.bucks>=c.bucks){ 
+            resources.superBucks-=c.super; resources.bucks-=c.bucks; 
+            resources.diamonds=0; resources.gold=0; minersCount.fill(0); 
+            totalMined=0; totalMinersPurchased=0; totalExchangeDiamonds=0; totalBucksSpentOnShop=0; 
+            storageLevel=0; storedDiamonds=0; 
+            prestigeCount++; prestigeMultiplier=1+prestigeCount*0.2;
+            
+            // СБРОС ЗАДАНИЙ ПРИ ПРЕСТИЖЕ
+            for(let q of [...Object.values(questTemplates), ...premiumQuests, ...referralQuests]) {
+                q.currentLevel = 0;
+                q.claimedLevels = [];
+            }
+            
+            saveGame(); updateUI(); 
+            showToast(`🌟 Престиж! Множитель ${prestigeMultiplier.toFixed(1)}x. Задания сброшены!`); 
+        } else showToast(`Не хватает: ${c.super}💸 и ${c.bucks}💵`); 
+    }
     function buyStorageUpgrade() { if(storageLevel>=3) return showToast("Максимум"); let c={ super:[0,1500,2500,6000][storageLevel+1], gold:[0,30000,100000,500000][storageLevel+1] }; if(resources.superBucks>=c.super && resources.gold>=c.gold){ resources.superBucks-=c.super; resources.gold-=c.gold; storageLevel++; saveGame(); updateUI(); showToast(`Склад улучшен до ${storageLevel+1} уровня`); } else showToast(`Нужно ${c.super}💸 и ${c.gold}💰`); }
     function buyOilIsland() { if(oilIsland.owned) return showToast("Уже куплен"); if(resources.oil>=200){ resources.oil-=200; oilIsland.owned=true; oilIsland.lastCollect=0; saveGame(); updateUI(); showToast("🏝️ Нефтяной остров куплен!"); } else showToast("Нужно 200 нефти"); }
     function collectOilIsland() { if(!oilIsland.owned) return showToast("Купите остров"); if((Date.now()-(oilIsland.lastCollect||0))<12*3600000) return showToast("Ещё не готов (12ч)"); let hourly=totalProductionRaw()*3600; let isDiam=Math.random()<0.7; if(isDiam){ let amt=Math.floor(hourly*(0.5+Math.random()*1)); storedDiamonds += amt; showToast(`🏝️ Остров: +${amt}💎 (на склад)`); } else{ resources.oil+=1; showToast(`🏝️ Остров: +1🛢️`); } oilIsland.lastCollect=Date.now(); saveGame(); updateUI(); }
@@ -285,7 +303,7 @@
     function exchangeBucksToOil(amt) { let u=Math.min(amt,resources.bucks); if(u>0){ resources.bucks-=u; resources.oil+=u; saveGame(); updateUI(); showToast(`+${u}🛢️`); } else showToast("Недостаточно баксов"); }
     function buyVip(pkg) { if(pkg.forever && currentUser.vip.forever) return showToast("Уже навсегда"); if(resources.bucks>=pkg.costBucks){ resources.bucks-=pkg.costBucks; if(pkg.forever){ currentUser.vip.forever=true; currentUser.vip.active=true; } else { let ne=Math.max(currentUser.vip.expires||Date.now(),Date.now())+pkg.days*86400000; currentUser.vip.expires=ne; currentUser.vip.active=true; } saveGame(); updateUI(); showToast("VIP активирован!"); } else showToast("Не хватает баксов"); }
 
-    // ---------- Админ-функции для управления другими пользователями ----------
+    // ---------- Админ-функции ----------
     async function modifyUserData(uid, modifyFn) {
         if(isGuest) { showToast("Админ-панель доступна только в Telegram"); return; }
         const targetId = uid || document.getElementById('targetUserId').value;
@@ -302,7 +320,6 @@
         }
     }
 
-    // Функция полного сброса прогресса пользователя (удаляет документ и создаёт новый с чистым стартом)
     async function resetUserProgress() {
         if(isGuest) { showToast("Админ-панель доступна только в Telegram"); return; }
         const targetId = document.getElementById('targetUserId').value;
@@ -310,7 +327,6 @@
         if(!confirm(`Вы уверены, что хотите полностью удалить прогресс пользователя ${targetId}? Это действие необратимо!`)) return;
         
         const userRef = doc(db, "users", targetId);
-        // Создаём чистые данные пользователя
         const cleanData = {
             resources: { diamonds: 0, oil: 0, gold: 10000, bucks: 0, superBucks: 0 },
             minersCount: new Array(7).fill(0),
@@ -334,6 +350,14 @@
                 daily: { streak: 0, lastClaim: 0, claimedDays: [] },
                 vipDailyLast: 0
             },
+            // Сброс заданий
+            questTemplates: {
+                mine: { name: "Добыча алмазов", baseReq: 100, multiplier: 2, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"diamonds_mined" },
+                miners: { name: "Наём шахтёров", baseReq: 3, multiplier: 1.8, currentLevel: 0, claimedLevels: [], rewardGoldBase: 300, type:"miners_bought" },
+                exchange: { name: "Обмен алмазов→золото", baseReq: 500, multiplier: 1.6, currentLevel: 0, claimedLevels: [], rewardGoldBase: 250, type:"exchange_diamonds" }
+            },
+            premiumQuests: [ { name: "Премиум: Траты баксов", baseReq: 1, multiplier: 1.5, currentLevel: 0, claimedLevels: [], rewardGoldBase: 400, type:"bucks_spent" } ],
+            referralQuests: [ { name: "Пригласи рефералов", baseReq: 1, multiplier: 1.5, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"referrals_count" } ],
             lastUpdated: Date.now()
         };
         await setDoc(userRef, cleanData);
@@ -428,12 +452,32 @@
     function deletePromo(code) { promoCodes=promoCodes.filter(p=>p.code!==code); saveGame(); renderPromoCodes(); }
 
     // Рефералы
-    function generateRefLink() { if(isGuest) return "Рефералы доступны только в Telegram"; return `https://t.me/minermine1_bot?start=ref_${userTelegramId}`; }
+    async function generateShortLink(longUrl) {
+        try {
+            const response = await fetch(`https://spoo.me/?url=${encodeURIComponent(longUrl)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            const data = await response.json();
+            return data.short_url || longUrl;
+        } catch(e) { return longUrl; }
+    }
+    function generateRefLink() { 
+        if(isGuest) return "Рефералы доступны только в Telegram"; 
+        return `https://t.me/minermine1_bot?start=ref_${userTelegramId}`; 
+    }
+    async function updateRefLinkDisplay() {
+        if(!isGuest) {
+            const longUrl = generateRefLink();
+            const shortUrl = await generateShortLink(longUrl);
+            document.getElementById('refLinkInput').value = shortUrl;
+        }
+    }
     function getRefBonusPercent() { return isVipActive() ? 7 : 5; }
     async function processReferral() {
         if(isGuest) return;
         const urlParams = new URLSearchParams(window.location.search);
-        const refId = urlParams.get('ref');
+        let refId = urlParams.get('ref') || urlParams.get('start')?.replace('ref_', '');
         if(!refId || refId === userTelegramId) return;
         const userDoc = await getDoc(doc(db, "users", userTelegramId));
         if(userDoc.exists() && userDoc.data().refBy) return;
@@ -446,11 +490,42 @@
             if(!referrals.includes(userTelegramId)) {
                 referrals.push(userTelegramId);
                 await updateDoc(inviterRef, { referrals });
+                // Обновляем задание на рефералов у пригласившего
+                updateQuestsByTypeForUser(refId, 'referrals_count', 1);
             }
         } else {
             await setDoc(inviterRef, { referrals: [userTelegramId] }, { merge: true });
         }
         showToast(`🎉 Вы пришли по реферальной ссылке! +5000💰 бонус (уже начислено)`);
+    }
+    
+    async function updateQuestsByTypeForUser(uid, type, value) {
+        if(uid === userTelegramId) {
+            updateQuestsByType(type, value);
+        } else {
+            const userRef = doc(db, "users", uid);
+            const userSnap = await getDoc(userRef);
+            if(userSnap.exists()) {
+                let userData = userSnap.data();
+                let totalReferrals = userData.currentUser?.referrals?.length || 0;
+                let referralQuest = userData.referralQuests?.[0];
+                if(referralQuest && referralQuest.currentLevel < 10) {
+                    let need = Math.floor(referralQuest.baseReq * Math.pow(referralQuest.multiplier, referralQuest.currentLevel));
+                    if(totalReferrals >= need && !(referralQuest.claimedLevels || []).includes(referralQuest.currentLevel)) {
+                        let rewardGold = referralQuest.rewardGoldBase * (referralQuest.currentLevel + 1);
+                        if(!referralQuest.claimedLevels) referralQuest.claimedLevels = [];
+                        referralQuest.claimedLevels.push(referralQuest.currentLevel);
+                        userData.resources = userData.resources || {};
+                        userData.resources.gold = (userData.resources.gold || 0) + rewardGold;
+                        if(referralQuest.currentLevel + 1 === 10) {
+                            userData.resources.bucks = (userData.resources.bucks || 0) + 1;
+                        }
+                        referralQuest.currentLevel++;
+                        await setDoc(userRef, userData, { merge: true });
+                    }
+                }
+            }
+        }
     }
 
     // Сохранение/загрузка Firestore
@@ -463,6 +538,7 @@
                 prestigeCount, prestigeMultiplier,
                 storageLevel, storageCollectedAt, storedDiamonds,
                 oilIsland, currentUser,
+                questTemplates, premiumQuests, referralQuests,
                 lastUpdated: Date.now()
             }, { merge: true });
         } catch(e) { console.warn(e); }
@@ -494,12 +570,18 @@
                 else if(currentUser.vip.expires && currentUser.vip.expires < Date.now()) currentUser.vip.active = false;
                 else if(currentUser.vip.expires > Date.now()) currentUser.vip.active = true;
                 else currentUser.vip.active = false;
+                
+                // Загружаем задания
+                if(data.questTemplates) questTemplates = data.questTemplates;
+                if(data.premiumQuests) premiumQuests = data.premiumQuests;
+                if(data.referralQuests) referralQuests = data.referralQuests;
                 return true;
             }
         } catch(e) { console.warn(e); }
         return false;
     }
-    async function saveGame() { if(!isGuest) await saveToFirestore(); else sessionStorage.setItem('miner_guest', JSON.stringify({ resources, minersCount, totalMined, totalMinersPurchased, totalExchangeDiamonds, totalBucksSpentOnShop, prestigeCount, prestigeMultiplier, storageLevel, storageCollectedAt, storedDiamonds, oilIsland, currentUser, linkQuests, promoCodes })); }
+    
+    async function saveGame() { if(!isGuest) await saveToFirestore(); else sessionStorage.setItem('miner_guest', JSON.stringify({ resources, minersCount, totalMined, totalMinersPurchased, totalExchangeDiamonds, totalBucksSpentOnShop, prestigeCount, prestigeMultiplier, storageLevel, storageCollectedAt, storedDiamonds, oilIsland, currentUser, linkQuests, promoCodes, questTemplates, premiumQuests, referralQuests })); }
     async function loadGame() {
         let loaded = false;
         if(!isGuest) {
@@ -512,7 +594,7 @@
             }
         } else {
             const raw = sessionStorage.getItem('miner_guest');
-            if(raw) { try { let d=JSON.parse(raw); Object.assign(resources,d.resources); minersCount=d.minersCount; totalMined=d.totalMined; totalMinersPurchased=d.totalMinersPurchased; totalExchangeDiamonds=d.totalExchangeDiamonds; totalBucksSpentOnShop=d.totalBucksSpentOnShop; prestigeCount=d.prestigeCount||0; prestigeMultiplier=d.prestigeMultiplier||1.0; storageLevel=d.storageLevel||0; storageCollectedAt=d.storageCollectedAt||Date.now(); storedDiamonds=d.storedDiamonds||0; oilIsland=d.oilIsland||{owned:false,lastCollect:0}; currentUser=d.currentUser; linkQuests=d.linkQuests||[]; promoCodes=d.promoCodes||[]; loaded=true; } catch(e){} }
+            if(raw) { try { let d=JSON.parse(raw); Object.assign(resources,d.resources); minersCount=d.minersCount; totalMined=d.totalMined; totalMinersPurchased=d.totalMinersPurchased; totalExchangeDiamonds=d.totalExchangeDiamonds; totalBucksSpentOnShop=d.totalBucksSpentOnShop; prestigeCount=d.prestigeCount||0; prestigeMultiplier=d.prestigeMultiplier||1.0; storageLevel=d.storageLevel||0; storageCollectedAt=d.storageCollectedAt||Date.now(); storedDiamonds=d.storedDiamonds||0; oilIsland=d.oilIsland||{owned:false,lastCollect:0}; currentUser=d.currentUser; linkQuests=d.linkQuests||[]; promoCodes=d.promoCodes||[]; questTemplates=d.questTemplates; premiumQuests=d.premiumQuests; referralQuests=d.referralQuests; loaded=true; } catch(e){} }
             if(!loaded) resources.gold = 10000;
         }
         if(!currentUser.daily) currentUser.daily={streak:0,lastClaim:0,claimedDays:[]};
@@ -528,6 +610,17 @@
             let y=new Date(Date.now()-86400000).toDateString();
             if(lastClaim!==y){ currentUser.daily.streak=0; currentUser.daily.claimedDays=[]; }
         }
+        // Инициализация заданий, если их нет
+        if(!questTemplates) {
+            questTemplates = {
+                mine: { name: "Добыча алмазов", baseReq: 100, multiplier: 2, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"diamonds_mined" },
+                miners: { name: "Наём шахтёров", baseReq: 3, multiplier: 1.8, currentLevel: 0, claimedLevels: [], rewardGoldBase: 300, type:"miners_bought" },
+                exchange: { name: "Обмен алмазов→золото", baseReq: 500, multiplier: 1.6, currentLevel: 0, claimedLevels: [], rewardGoldBase: 250, type:"exchange_diamonds" }
+            };
+        }
+        if(!premiumQuests) premiumQuests = [ { name: "Премиум: Траты баксов", baseReq: 1, multiplier: 1.5, currentLevel: 0, claimedLevels: [], rewardGoldBase: 400, type:"bucks_spent" } ];
+        if(!referralQuests) referralQuests = [ { name: "Пригласи рефералов", baseReq: 1, multiplier: 1.5, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"referrals_count" } ];
+        
         updateUI();
         checkPendingLinkQuest();
     }
@@ -535,26 +628,58 @@
     // UI
     let currentShopTab = "lootBoxes";
     let currentTopTab = "production";
-    let premiumQuests = [ { name: "Премиум: Траты баксов", baseReq: 1, multiplier: 1.5, currentLevel: 0, claimedLevels: [], rewardGoldBase: 400, type:"bucks_spent" } ];
-    let questTemplates = {
-        mine: { name: "Добыча алмазов", baseReq: 100, multiplier: 2, currentLevel: 0, claimedLevels: [], rewardGoldBase: 200, type:"diamonds_mined" },
-        miners: { name: "Наём шахтёров", baseReq: 3, multiplier: 1.8, currentLevel: 0, claimedLevels: [], rewardGoldBase: 300, type:"miners_bought" },
-        exchange: { name: "Обмен алмазов→золото", baseReq: 500, multiplier: 1.6, currentLevel: 0, claimedLevels: [], rewardGoldBase: 250, type:"exchange_diamonds" }
-    };
+    let questTemplates = {};
+    let premiumQuests = [];
+    let referralQuests = [];
     const dailyRewards = Array(30).fill().map((_,i)=>(i+1)%5===0?{type:"miner"}:{type:"gold",amount:500+Math.floor(Math.random()*1000)});
-    function updateQuestsByType(type,val){ let all=[...Object.values(questTemplates),...premiumQuests]; for(let q of all){ if(q.type===type && q.currentLevel<10){ let prog=(type==='diamonds_mined')?totalMined:(type==='miners_bought')?totalMinersPurchased:(type==='exchange_diamonds')?totalExchangeDiamonds:(type==='bucks_spent')?totalBucksSpentOnShop:0; let need=Math.floor(q.baseReq*Math.pow(q.multiplier,q.currentLevel)); if(prog>=need && !(q.claimedLevels||[]).includes(q.currentLevel)){ let rewardGold=q.rewardGoldBase*(q.currentLevel+1); resources.gold+=rewardGold; if(!q.claimedLevels) q.claimedLevels=[]; q.claimedLevels.push(q.currentLevel); showToast(`🏆 ${q.name} ур.${q.currentLevel+1} +${rewardGold}💰`); if(q.currentLevel+1===10){ resources.bucks+=1; showToast(`⭐ Пройдено! +1 бакс`); } q.currentLevel++; saveGame(); updateUI(); } } } renderQuests(); }
+    
+    function updateQuestsByType(type, val) { 
+        let all = [];
+        if(questTemplates.mine) all.push(questTemplates.mine);
+        if(questTemplates.miners) all.push(questTemplates.miners);
+        if(questTemplates.exchange) all.push(questTemplates.exchange);
+        if(premiumQuests[0]) all.push(premiumQuests[0]);
+        if(referralQuests[0]) all.push(referralQuests[0]);
+        for(let q of all) {
+            if(q.type === type && q.currentLevel < 10) {
+                let prog = 0;
+                if(type === 'diamonds_mined') prog = totalMined;
+                else if(type === 'miners_bought') prog = totalMinersPurchased;
+                else if(type === 'exchange_diamonds') prog = totalExchangeDiamonds;
+                else if(type === 'bucks_spent') prog = totalBucksSpentOnShop;
+                else if(type === 'referrals_count') prog = currentUser.referrals.length;
+                let need = Math.floor(q.baseReq * Math.pow(q.multiplier, q.currentLevel));
+                if(prog >= need && !(q.claimedLevels || []).includes(q.currentLevel)) {
+                    let rewardGold = q.rewardGoldBase * (q.currentLevel + 1);
+                    resources.gold += rewardGold;
+                    if(!q.claimedLevels) q.claimedLevels = [];
+                    q.claimedLevels.push(q.currentLevel);
+                    showToast(`🏆 ${q.name} ур.${q.currentLevel+1} +${rewardGold}💰`);
+                    if(q.currentLevel + 1 === 10) {
+                        resources.bucks += 1;
+                        showToast(`⭐ Пройдено! +1 бакс`);
+                    }
+                    q.currentLevel++;
+                    saveGame();
+                    updateUI();
+                }
+            }
+        }
+        renderQuests();
+    }
+    
     function renderMiners() { let c=document.getElementById('minersGrid'); if(!c) return; c.innerHTML=''; for(let i=0;i<7;i++){ let m=minersData[i]; c.innerHTML+=`<div class="miner-card"><div><b>${m.name}</b> lvl${m.level}</div><div>⚡ ${(m.prodSec*getTotalMultiplier()).toFixed(5)}/сек</div><div>💰 ${m.costGold}</div><div>Кол-во: ${minersCount[i]}</div><div class="buy-group"><button class="buy-btn" data-lvl="${i}" data-qty="1">+1</button><button class="buy-btn" data-lvl="${i}" data-qty="10">+10</button></div></div>`; } document.querySelectorAll('.buy-btn').forEach(btn=>btn.addEventListener('click',()=>buyMiner(parseInt(btn.dataset.lvl),parseInt(btn.dataset.qty)))); document.getElementById('collectStorageBtn').onclick=collectStorage; }
     function renderShop(tab) { let container=document.getElementById('shopContent'); if(tab==='vipshop'){ container.innerHTML=`<div class="shop-item"><h3>👑 VIP статус</h3><button class="desc-btn" id="vipDescBtn">📋 Описание</button><div><button class="shop-buy" data-vip='{"days":1,"costBucks":99}'>1 день (99💵)</button><button class="shop-buy" data-vip='{"days":7,"costBucks":499}'>7 дней (499💵)</button><button class="shop-buy" data-vip='{"days":30,"costBucks":999}'>30 дней (999💵)</button><button class="shop-buy" data-vip='{"forever":true,"costBucks":1999}'>Навсегда (1999💵)</button></div></div>`; document.querySelectorAll('[data-vip]').forEach(btn=>btn.addEventListener('click',()=>buyVip(JSON.parse(btn.dataset.vip)))); document.getElementById('vipDescBtn')?.addEventListener('click',()=>showModal("👑 VIP","1) 12ч награда\n2) Увеличение склада x2\n3) x2 добыча\n4) Корона в топе\n5) +2% к реф. бонусу")); return; }
         if(tab==='lootBoxes'){ container.innerHTML=lootBoxes.map(b=>`<div class="shop-item"><h3>${b.name}</h3><p>Цена: ${b.price} ${b.currency==='superBucks'?'💸':b.currency==='bucks'?'💵':'🛢️'}</p><button class="desc-btn" data-desc='${(b.desc+"\n\n"+(b.jackpotDesc||"")).replace(/\n/g,'\\n')}'>📋</button><button class="shop-buy" data-box='${JSON.stringify(b)}'>Купить</button></div>`).join(''); document.querySelectorAll('[data-box]').forEach(btn=>btn.addEventListener('click',()=>openBox(JSON.parse(btn.dataset.box)))); document.querySelectorAll('[data-desc]').forEach(btn=>btn.addEventListener('click',()=>showModal("Содержимое",btn.dataset.desc.replace(/\\n/g,'\n')))); return; }
     }
-    function renderQuests() { let c=document.getElementById('questsContainer'); if(!c) return; let linkHtml=`<div class="quest-category"><h3>🔗 Задания-ссылки</h3><div class="quest-levels">`+linkQuests.map(q=>`<div class="quest-line"><div><b>${q.desc}</b><br>Перейти и вернуться</div><button class="quest-link-btn" data-linkid="${q.id}">Выполнить</button></div>`).join('')+`</div></div>`; let normalHtml=`<div class="quest-category"><h3>✨ Премиум задания</h3><div class="quest-levels">`+premiumQuests.map(q=>getQuestHtml(q)).join('')+`</div></div><div class="quest-category"><h3>📖 Сюжетные задания</h3><div class="quest-levels">`+Object.values(questTemplates).map(q=>getQuestHtml(q)).join('')+`</div></div>`; c.innerHTML=linkHtml+normalHtml; document.querySelectorAll('.quest-link-btn').forEach(btn=>btn.addEventListener('click',()=>startLinkQuest(parseInt(btn.dataset.linkid)))); function getQuestHtml(q){ let need=Math.floor(q.baseReq*Math.pow(q.multiplier,q.currentLevel)); let prog=(q.type==='diamonds_mined')?totalMined:(q.type==='miners_bought')?totalMinersPurchased:(q.type==='exchange_diamonds')?totalExchangeDiamonds:(q.type==='bucks_spent')?totalBucksSpentOnShop:0; let comp=q.claimedLevels?.length||0; return `<div class="quest-line"><div><b>${q.name}</b> (${comp}/10)<br>${prog.toFixed(1)}/${need.toFixed(1)}<progress value="${prog}" max="${need}"></progress></div><div>${q.currentLevel<10?`+${q.rewardGoldBase*(q.currentLevel+1)}💰`:'✅'}</div></div>`; } }
+    function renderQuests() { let c=document.getElementById('questsContainer'); if(!c) return; let linkHtml=`<div class="quest-category"><h3>🔗 Задания-ссылки</h3><div class="quest-levels">`+linkQuests.map(q=>`<div class="quest-line"><div><b>${q.desc}</b><br>Перейти и вернуться</div><button class="quest-link-btn" data-linkid="${q.id}">Выполнить</button></div>`).join('')+`</div></div>`; let normalHtml=`<div class="quest-category"><h3>✨ Премиум задания</h3><div class="quest-levels">`+(premiumQuests[0] ? getQuestHtml(premiumQuests[0]) : '')+`</div></div><div class="quest-category"><h3>📖 Сюжетные задания</h3><div class="quest-levels">`+Object.values(questTemplates).map(q=>getQuestHtml(q)).join('')+`</div></div><div class="quest-category"><h3>👥 Реферальные задания</h3><div class="quest-levels">`+(referralQuests[0] ? getQuestHtml(referralQuests[0]) : '')+`</div></div>`; c.innerHTML=linkHtml+normalHtml; document.querySelectorAll('.quest-link-btn').forEach(btn=>btn.addEventListener('click',()=>startLinkQuest(parseInt(btn.dataset.linkid)))); function getQuestHtml(q){ let need=Math.floor(q.baseReq*Math.pow(q.multiplier,q.currentLevel)); let prog=0; if(q.type==='diamonds_mined') prog=totalMined; else if(q.type==='miners_bought') prog=totalMinersPurchased; else if(q.type==='exchange_diamonds') prog=totalExchangeDiamonds; else if(q.type==='bucks_spent') prog=totalBucksSpentOnShop; else if(q.type==='referrals_count') prog=currentUser.referrals.length; let comp=q.claimedLevels?.length||0; return `<div class="quest-line"><div><b>${q.name}</b> (${comp}/10)<br>${prog.toFixed(1)}/${need.toFixed(1)}<progress value="${prog}" max="${need}"></progress></div><div>${q.currentLevel<10?`+${q.rewardGoldBase*(q.currentLevel+1)}💰`:'✅'}</div></div>`; } }
     function claimDaily(day){ if(day!==currentUser.daily.streak) return showToast("Можно только следующий день!"); if(currentUser.daily.claimedDays.includes(day)) return showToast("Уже забрано"); let now=new Date().toDateString(); if(currentUser.daily.lastClaim && new Date(currentUser.daily.lastClaim).toDateString()===now) return showToast("Сегодня уже брали"); let r=dailyRewards[day]; if(r.type==="gold"){ resources.gold+=r.amount; showToast(`+${r.amount}💰`); } else{ let lvl=Math.floor(Math.random()*7)+1; minersCount[lvl-1]++; totalMinersPurchased++; showToast(`🎁 + Шахтёр Lv.${lvl}`); } currentUser.daily.claimedDays.push(day); currentUser.daily.streak++; currentUser.daily.lastClaim=Date.now(); if(currentUser.daily.streak>=30){ currentUser.daily.streak=0; currentUser.daily.claimedDays=[]; showToast("🎉 Цикл завершён!"); } saveGame(); updateUI(); renderDaily(); }
     function claimVipDaily(){ if(!isVipActive()) return showToast("VIP неактивен"); if(Date.now()-(currentUser.vipDailyLast||0)<86400000) return showToast("Раз в 24ч"); let hourly=totalProductionRaw()*3600; let r=Math.floor(Math.random()*3); if(r===0){ let amt=Math.max(5000,Math.floor(hourly*(0.5+Math.random()*1))); resources.gold+=amt; showToast(`💰 VIP клад: +${amt} золота`); } else if(r===1){ let amt=Math.max(10000,Math.floor(hourly*(0.5+Math.random()*1))); storedDiamonds+=amt; showToast(`💎 VIP клад: +${Math.floor(amt)} алмазов (на склад)`); } else{ resources.oil+=1; showToast(`🛢️ VIP клад: +1 нефть`); } currentUser.vipDailyLast=Date.now(); saveGame(); updateUI(); }
     function renderDaily(){ let html=`<div class="daily-rewards"><h3>📅 Ежедневный стрик (день ${currentUser.daily.streak+1}/30)</h3><div class="daily-grid">`; for(let i=0;i<30;i++){ let claimed=currentUser.daily.claimedDays.includes(i); let todayActive=(i===currentUser.daily.streak && new Date().toDateString() !== (currentUser.daily.lastClaim?new Date(currentUser.daily.lastClaim).toDateString():'')); html+=`<div class="daily-day ${claimed?'claimed':''} ${todayActive?'today':''}" data-day="${i}">День ${i+1}<br>${dailyRewards[i].type==='miner'?'🎁 Шахтёр':'💰 '+dailyRewards[i].amount}</div>`; } html+=`</div>${currentUser.daily.streak<30 && !currentUser.daily.claimedDays.includes(currentUser.daily.streak) && new Date().toDateString() !== (currentUser.daily.lastClaim?new Date(currentUser.daily.lastClaim).toDateString():'') ? `<button id="claimDailyBtn" class="action-button" style="margin-top:12px;">Забрать</button>` : ''}</div>`; document.getElementById('dailyContainer').innerHTML=html; document.querySelectorAll('.daily-day').forEach(div=>{ if(div.classList.contains('today') && !div.classList.contains('claimed')) div.addEventListener('click',()=>claimDaily(parseInt(div.dataset.day))); }); if(document.getElementById('claimDailyBtn')) document.getElementById('claimDailyBtn').onclick=()=>claimDaily(currentUser.daily.streak); document.getElementById('claimVipDailyBtn').onclick=claimVipDaily; }
     function renderIslands(){ let c=document.getElementById('islandsContainer'); if(!c) return; let sh=getStorageHours(); c.innerHTML=`<div class="admin-card"><h3>🏝️ Нефтяной остров</h3><p>Стоимость: 200 🛢️</p>${!oilIsland.owned?'<button id="buyOilIslandBtn" class="action-button">Купить</button>':'<button id="collectOilIslandBtn" class="action-button">Собрать доход</button>'}</div><div class="admin-card"><h3>🏗️ Остров склад</h3><p>Уровень: ${storageLevel+1}/4, время: ${sh===Infinity?'∞':sh+'ч'}</p>${storageLevel<3?'<button id="upgradeStorageBtn" class="action-button">Улучшить</button>':'<span>MAX</span>'}</div>`; document.getElementById('buyOilIslandBtn')?.addEventListener('click',buyOilIsland); document.getElementById('collectOilIslandBtn')?.addEventListener('click',collectOilIsland); document.getElementById('upgradeStorageBtn')?.addEventListener('click',buyStorageUpgrade); }
     async function getTopUsers() { if(isGuest) return []; try { const q = query(collection(db, "users"), orderBy("totalMined", "desc"), limit(10)); const snap = await getDocs(q); let users=[]; snap.forEach(d=>{ let data=d.data(); let prod=(data.minersCount?.reduce((s,c,i)=>s+c*minersData[i].prodSec,0)||0)*(data.currentUser?.vip?.active?2:1)*(data.prestigeMultiplier||1); users.push({ id:d.id, production:prod, referrals:data.currentUser?.referrals?.length||0, playtime:data.currentUser?.joinTime?Math.floor((Date.now()-data.currentUser.joinTime)/1000):0, isVip:data.currentUser?.vip?.active||false }); }); return users; } catch(e){ console.warn(e); return []; } }
     function renderTop(tab){ if(isGuest){ document.getElementById('topContent').innerHTML='<div class="top-list">Топ доступен только Telegram-пользователям</div>'; return; } getTopUsers().then(users=>{ if(tab==="production") users.sort((a,b)=>b.production-a.production); else if(tab==="referrals") users.sort((a,b)=>b.referrals-a.referrals); else users.sort((a,b)=>b.playtime-a.playtime); let html=users.slice(0,10).map((u,i)=>`<div class="top-item"><span>${i+1}. ${u.id} ${u.isVip?'👑':''}</span><span>${tab==='production'?u.production.toFixed(2)+'💎/сек':tab==='referrals'?u.referrals+' реф':Math.floor(u.playtime/3600)+'ч '+(Math.floor(u.playtime/60)%60)+'м'}</span></div>`).join(''); document.getElementById('topContent').innerHTML=`<div class="top-list">${html||"Нет данных"}</div>`; }).catch(e=>console.warn(e)); }
-    function renderProfile() { document.getElementById('profileStats').innerHTML=`<div>🆔 ${isGuest?'Гость':userTelegramId}</div><div>⛏️ Шахтёров: ${minersCount.reduce((a,b)=>a+b,0)}</div><div>💎 Добыто: ${Math.floor(totalMined)}</div><div>💎 На счету: ${Math.floor(resources.diamonds)}</div><div>👑 VIP: ${isVipActive()?'Активен':'Неактивен'}</div><div>🌟 Множитель: ${getTotalMultiplier().toFixed(2)}x</div>`; document.getElementById('refStat').innerHTML=`Приглашено: ${currentUser.referrals.length} | Бонус: ${currentUser.refEarnings.toFixed(2)} (${getRefBonusPercent()}%)`; if(!isGuest) document.getElementById('refLinkInput').value = generateRefLink(); }
+    function renderProfile() { document.getElementById('profileStats').innerHTML=`<div>🆔 ${isGuest?'Гость':userTelegramId}</div><div>⛏️ Шахтёров: ${minersCount.reduce((a,b)=>a+b,0)}</div><div>💎 Добыто: ${Math.floor(totalMined)}</div><div>💎 На счету: ${Math.floor(resources.diamonds)}</div><div>👑 VIP: ${isVipActive()?'Активен':'Неактивен'}</div><div>🌟 Множитель: ${getTotalMultiplier().toFixed(2)}x</div>`; document.getElementById('refStat').innerHTML=`Приглашено: ${currentUser.referrals.length} | Бонус: ${currentUser.refEarnings.toFixed(2)} (${getRefBonusPercent()}%)`; if(!isGuest) updateRefLinkDisplay(); }
     function renderPrestige() { let c=getPrestigeCost(); document.getElementById('prestigeCostSuper').innerText=c.super; document.getElementById('prestigeCostBucks').innerText=c.bucks; document.getElementById('prestigeStats').innerHTML=`<div>🌟 Престижей: ${prestigeCount}</div><div>📈 Множитель: +${(prestigeCount*0.2).toFixed(1)}x</div><div>💰 Следующий: ${c.super}💸 + ${c.bucks}💵</div>`; }
     function updateUI() {
         document.getElementById('diamondsVal').innerText=Math.floor(resources.diamonds);
@@ -571,7 +696,7 @@
         renderMiners(); renderShop(currentShopTab); renderQuests(); renderDaily(); renderIslands(); renderTop(currentTopTab); renderProfile(); renderPrestige();
         document.getElementById('playtimeSpan').innerText=Math.floor((Date.now()-currentUser.joinTime)/1000);
         if(isGuest){ document.getElementById('refLinkBlock').style.opacity='0.5'; document.getElementById('copyRefBtn').disabled=true; }
-        else{ document.getElementById('refLinkBlock').style.opacity='1'; document.getElementById('copyRefBtn').disabled=false; document.getElementById('refLinkInput').value=generateRefLink(); }
+        else{ document.getElementById('refLinkBlock').style.opacity='1'; document.getElementById('copyRefBtn').disabled=false; }
     }
     function showModal(title,text){ let m=document.createElement('div'); m.className='modal'; m.innerHTML=`<div class="modal-content"><h3>${title}</h3><div style="white-space:pre-line">${text}</div><button class="close-modal">Закрыть</button></div>`; document.body.appendChild(m); m.querySelector('.close-modal').onclick=()=>m.remove(); }
     function showToast(msg){ let t=document.createElement('div'); t.className='toast'; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
@@ -587,7 +712,7 @@
         document.getElementById('exchangeSuperToGold').onclick=()=>exchangeSuperToGold(parseInt(document.getElementById('superToGoldAmount').value)||0);
         document.getElementById('exchangeOilToBucks').onclick=()=>exchangeOilToBucks(parseInt(document.getElementById('oilToBucksAmount').value)||0);
         document.getElementById('exchangeBucksToOil').onclick=()=>exchangeBucksToOil(parseInt(document.getElementById('oilToBucksAmount').value)||0);
-        document.getElementById('copyRefBtn').onclick=()=>{ if(!isGuest){ navigator.clipboard.writeText(generateRefLink()); showToast("Ссылка скопирована"); } else showToast("Рефералы доступны только в Telegram"); };
+        document.getElementById('copyRefBtn').onclick=()=>{ if(!isGuest){ navigator.clipboard.writeText(document.getElementById('refLinkInput').value); showToast("Ссылка скопирована"); } else showToast("Рефералы доступны только в Telegram"); };
         document.getElementById('activatePromoProfileBtn').onclick=()=>activatePromo(document.getElementById('promoInputProfile').value);
         document.getElementById('depositBtn').onclick=()=>{ if(!isGuest) window.open(`https://t.me/sup_miner_help?text=💰 ПОПОЛНЕНИЕ%0AID: ${userTelegramId}`, '_blank'); else showToast("Доступно только в Telegram"); };
         document.getElementById('withdrawBtn').onclick=()=>{ if(!isGuest && resources.bucks>=50) window.open(`https://t.me/sup_miner_help?text=💸 ВЫВОД%0AID: ${userTelegramId}%0AСумма: ${Math.floor(resources.bucks)} баксов`, '_blank'); else showToast(isGuest?"Только в Telegram":"Вывод от 50 баксов"); };
