@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Miner Empire | Исправленное сохранение</title>
+    <title>Miner Empire | Полная версия</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         body { background: linear-gradient(135deg, #170a2e, #3b1c68, #7e42c9); padding: 16px; color: #f5ecff; min-height: 100vh; }
@@ -262,7 +263,7 @@
         saveGame(); updateUI();
     }
 
-    // ---------- Основные функции ----------
+    // ---------- Основные функции (исправлены: добавлены async/await для сохранения) ----------
     function isVipActive() { return currentUser.vip.active; }
     function getTotalMultiplier() { return prestigeMultiplier * (isVipActive() ? 2 : 1); }
     function totalProductionRaw() { let s=0; for(let i=0;i<7;i++) s+= minersCount[i]*minersData[i].prodSec; return s; }
@@ -272,7 +273,7 @@
     function getStorageFillPercent() { let h = getStorageHours(); if(h === Infinity) return 100; let maxStorage = totalProductionRaw() * h * 3600; if(maxStorage <= 0) return 0; return Math.min(100, (storedDiamonds / maxStorage) * 100); }
     function addToStorage(amt) { let h = getStorageHours(); let maxStorage = h === Infinity ? Infinity : totalProductionRaw() * h * 3600; if(maxStorage !== Infinity && storedDiamonds + amt > maxStorage) { storedDiamonds = maxStorage; } else { storedDiamonds += amt; } storageCollectedAt = Date.now(); }
     
-    // ИСПРАВЛЕННАЯ: collectStorage теперь асинхронная и дожидается сохранения
+    // ИСПРАВЛЕНО: collectStorage теперь асинхронная и дожидается сохранения
     async function collectStorage() { 
         if(storedDiamonds > 0) { 
             let collected = storedDiamonds; 
@@ -442,7 +443,7 @@
         } else showToast("Не хватает баксов"); 
     }
 
-    // ---------- Админ-функции (асинхронные) ----------
+    // ---------- Админ-функции ----------
     async function modifyUserData(uid, modifyFn) {
         if(isGuest) { showToast("Админ-панель доступна только в Telegram"); return; }
         const targetId = uid || document.getElementById('targetUserId').value;
@@ -578,7 +579,7 @@
         document.getElementById('adminStatsResult').innerHTML = stats;
     }
 
-    // Задания-ссылки, промокоды (оставлены без изменений, но тоже должны быть async)
+    // Задания-ссылки, промокоды (оставлены без изменений, но они тоже используют saveGame)
     function createLinkQuest(desc,url,type,amt) { linkQuests.push({id:Date.now(),desc,url,rewardType:type,amount:amt,completed:false}); saveGame(); renderLinkQuests(); showToast("Задание-ссылка создано"); }
     function startLinkQuest(id) { let q=linkQuests.find(l=>l.id===id); if(q && !q.completed){ localStorage.setItem('pendingLinkQuest',JSON.stringify({id:q.id,startTime:Date.now()})); window.open(q.url,'_blank'); } else showToast("Уже выполнено"); }
     function checkPendingLinkQuest() { let raw=localStorage.getItem('pendingLinkQuest'); if(raw){ let data=JSON.parse(raw); let q=linkQuests.find(l=>l.id===data.id); if(q && !q.completed && Date.now()-data.startTime>2000){ if(q.rewardType==='gold') resources.gold+=q.amount; else if(q.rewardType==='diamonds') storedDiamonds+=q.amount; else if(q.rewardType==='oil') resources.oil+=q.amount; else if(q.rewardType==='bucks') resources.bucks+=q.amount; else if(q.rewardType==='superBucks') resources.superBucks+=q.amount; q.completed=true; saveGame(); updateUI(); showToast(`✅ +${q.amount} ${q.rewardType}`); } localStorage.removeItem('pendingLinkQuest'); } }
@@ -665,7 +666,7 @@
         }
     }
 
-    // Сохранение/загрузка Firestore (с принудительным сохранением перед выходом)
+    // Сохранение/загрузка Firestore
     async function saveToFirestore() {
         if(isGuest) return;
         try {
@@ -679,7 +680,7 @@
                 lastUpdated: Date.now()
             }, { merge: true });
             console.log("Сохранено в Firestore");
-        } catch(e) { console.error("Ошибка сохранения:", e); showToast("Ошибка сохранения: " + e.message); }
+        } catch(e) { console.error("Ошибка сохранения:", e); }
     }
     
     async function loadFromFirestore() {
@@ -715,7 +716,7 @@
                 if(data.referralQuests) referralQuests = data.referralQuests;
                 return true;
             }
-        } catch(e) { console.error("Ошибка загрузки:", e); showToast("Ошибка загрузки: " + e.message); }
+        } catch(e) { console.error("Ошибка загрузки:", e); }
         return false;
     }
     
@@ -842,9 +843,10 @@
     function showModal(title,text){ let m=document.createElement('div'); m.className='modal'; m.innerHTML=`<div class="modal-content"><h3>${title}</h3><div style="white-space:pre-line">${text}</div><button class="close-modal">Закрыть</button></div>`; document.body.appendChild(m); m.querySelector('.close-modal').onclick=()=>m.remove(); }
     function showToast(msg){ let t=document.createElement('div'); t.className='toast'; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
     
-    // Функция удаления прогресса (кнопка в личном кабинете)
-    async function deleteProgress() { 
+    // ИСПРАВЛЕННАЯ ФУНКЦИЯ УДАЛЕНИЯ ПРОГРЕССА (КНОПКА В ЛИЧНОМ КАБИНЕТЕ)
+    function deleteProgress() { 
         if(confirm("Удалить прогресс? Необратимо! Вы получите 10000 золота, а задания и шахтёры сбросятся.")){ 
+            // Сбрасываем ресурсы, но оставляем нефть и баксы (как при престиже)
             resources = { diamonds: 0, oil: resources.oil, gold: 10000, bucks: resources.bucks, superBucks: 0 };
             minersCount.fill(0); 
             totalMined = 0; 
@@ -855,9 +857,11 @@
             storedDiamonds = 0; 
             prestigeCount = 0; 
             prestigeMultiplier = 1.0;
+            // Сбрасываем ежедневный стрик
             currentUser.daily.streak = 0;
             currentUser.daily.claimedDays = [];
             currentUser.daily.lastClaim = 0;
+            // Сбрасываем задания полностью (как при престиже)
             if(questTemplates.mine) {
                 questTemplates.mine.currentLevel = 0;
                 questTemplates.mine.claimedLevels = [];
@@ -874,7 +878,9 @@
                 referralQuests[0].currentLevel = 0;
                 referralQuests[0].claimedLevels = [];
             }
-            await saveGame(); 
+            // Нефтяной остров оставляем (если был куплен)
+            // Рефералов не трогаем
+            saveGame(); 
             updateUI(); 
             showToast("Прогресс удалён, выдано 10000 золота, задания сброшены!"); 
         } 
